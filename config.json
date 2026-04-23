@@ -4,7 +4,7 @@
 		"orientation":		"LR",
 		"node.shape":		"plaintext",
 		"node.font.size":	"10",
-		"node.font.name":	"Ubuntu",
+		"node.font.name":	"Arial",
 		
 		"text.align.header":	"right",
 		"text.align.sequence":	"right",

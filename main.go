@@ -144,6 +144,13 @@ func (pbs *pbstate) AddWriter(target io.Writer) {
 	pbs.writer.AddWriter(target)
 }
 
+func (pbs *pbstate) closeOutputWriters() {
+	if pbs == nil || pbs.writer == nil {
+		return
+	}
+	_ = pbs.writer.Close()
+}
+
 func (pbs *pbstate) target() io.Writer {
 	if pbs.writer != nil {
 		return pbs.writer
@@ -203,6 +210,9 @@ func (pbs *pbstate) getResolution(scope FullName, shorttype OriginalName) *tinfo
 }
 
 func (pbs *pbstate) recordInclusion(from UniqueName, field string, to UniqueName) {
+	if pbs.isUniqueNameMissingTypePlaceholder(to) && !pbs.showMissingTypeGraphElements() {
+		return
+	}
 
 	fullFrom := from
 	if len(field) > 0 {
@@ -213,6 +223,20 @@ func (pbs *pbstate) recordInclusion(from UniqueName, field string, to UniqueName
 		pbs.inclusions[fullFrom] = make(map[UniqueName]int)
 	}
 	pbs.inclusions[fullFrom][to]++
+}
+
+// showMissingTypeGraphElements is true when placeholder nodes for unresolved types and edges to them are drawn.
+func (pbs *pbstate) showMissingTypeGraphElements() bool {
+	return options("show missing types")
+}
+
+func (pbs *pbstate) isUniqueNameMissingTypePlaceholder(to UniqueName) bool {
+	full, ok := pbs.knownNames[to]
+	if !ok {
+		return false
+	}
+	info, ok := pbs.types237[full]
+	return ok && info.typename == typenameMissing
 }
 
 func renderMissingNode(name OriginalName, unique UniqueName, fullname FullName) string {
@@ -261,7 +285,7 @@ func (pbs *pbstate) recordMissingInclusion(source FullName, from UniqueName, fie
 
 	// When allowed, register a placeholder so field resolution and getKind succeed; "show missing types" controls graph only.
 	unique := pbs.recordMissingType(from, missingType)
-	if options("show missing types") {
+	if pbs.showMissingTypeGraphElements() {
 		pbs.recordInclusion(from, field, unique)
 	}
 }
@@ -270,7 +294,7 @@ func (pbs *pbstate) includeProtoNodeInGraphOutput(info tinfo) bool {
 	if info.typename != typenameMissing {
 		return true
 	}
-	return options("show missing types")
+	return pbs.showMissingTypeGraphElements()
 }
 
 func (pbs *pbstate) getInclusion(from UniqueName, field string) (UniqueName, map[UniqueName]int) {
@@ -1361,7 +1385,7 @@ func processOneProto(name, selection string) {
 
 	pbs := NewPbs()
 	process(pbs, name, selection)
-	graphviz(pbs.outputFile, options(generateSvg), options(generatePng))
+	closeDotAndRunGraphviz(pbs)
 }
 
 func applyToAllFiles(root, selection string) {
@@ -1509,6 +1533,6 @@ func main() {
 	} else {
 		pbs := NewPbs()
 		process(pbs, *g_source, *g_selection)
-		graphviz(pbs.outputFile, options(generateSvg), options(generatePng))
+		closeDotAndRunGraphviz(pbs)
 	}
 }
