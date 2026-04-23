@@ -98,6 +98,7 @@
 	},
 	"options" : {
 		"allow missing imports":	true,
+		"allow unresolved types":	true,
 		"show missing types":		true,
 		"generate .png file":		false,
 		"generate .svg file":		true,

@@ -250,16 +250,27 @@ func (pbs *pbstate) recordMissingType(from UniqueName, missingType OriginalName)
 	}
 }
 
-func (pbs *pbstate) recordMissingInclusion(from UniqueName, field string, missingType OriginalName) {
+func (pbs *pbstate) recordMissingInclusion(source FullName, from UniqueName, field string, missingType OriginalName) {
 	debug("****** Field [", field, "] from [", from, "] refers to non-existing type [", missingType, "] ******")
 
-	if options("show missing types") {
-		// 1. save type (if not already)
-		unique := pbs.recordMissingType(from, missingType)
+	if !optionBoolDefault("allow unresolved types", true) {
+		msg := fmt.Sprintf("unresolved type %q; source: %s (set options[\"allow unresolved types\"] to true to continue, or correct includes/imports)", missingType, source)
+		alert(msg)
+		panic(msg)
+	}
 
-		// 2. record the connection
+	// When allowed, register a placeholder so field resolution and getKind succeed; "show missing types" controls graph only.
+	unique := pbs.recordMissingType(from, missingType)
+	if options("show missing types") {
 		pbs.recordInclusion(from, field, unique)
 	}
+}
+
+func (pbs *pbstate) includeProtoNodeInGraphOutput(info tinfo) bool {
+	if info.typename != typenameMissing {
+		return true
+	}
+	return options("show missing types")
 }
 
 func (pbs *pbstate) getInclusion(from UniqueName, field string) (UniqueName, map[UniqueName]int) {
@@ -488,20 +499,26 @@ func (pbs *pbstate) showInclusion(groupByPackages bool, leaveRootPackageUnwrappe
 
 				pbs.applyTemplate("comment", "leaving the root package unwrapped")
 				for _, info := range members {
-					pbs.applyTemplate("entry", info.raw)
+					if pbs.includeProtoNodeInGraphOutput(info) {
+						pbs.applyTemplate("entry", info.raw)
+					}
 				}
 			} else {
 
 				pbs.applyTemplate("cluster.prefix", data)
 				for _, info := range members {
-					pbs.applyTemplate("cluster.entry", info.raw)
+					if pbs.includeProtoNodeInGraphOutput(info) {
+						pbs.applyTemplate("cluster.entry", info.raw)
+					}
 				}
 				pbs.applyTemplate("cluster.suffix", data)
 			}
 		}
 	} else {
 		for _, info := range pbs.types237 {
-			pbs.applyTemplate("entry", info.raw)
+			if pbs.includeProtoNodeInGraphOutput(info) {
+				pbs.applyTemplate("entry", info.raw)
+			}
 		}
 	}
 
@@ -892,7 +909,7 @@ func (pbs *pbstate) handleMessageBody(msg *proto.Message) {
 					pbs.encounteredType(info.unique, actual.Name, inf.unique)
 				} else {
 					alert("failed to resolve", actual.Type)
-					pbs.recordMissingInclusion(info.unique, actual.Name, OriginalName(actual.Type))
+					pbs.recordMissingInclusion(full, info.unique, actual.Name, OriginalName(actual.Type))
 				}
 			}
 
@@ -921,7 +938,7 @@ func (pbs *pbstate) handleMessageBody(msg *proto.Message) {
 					pbs.recordInclusion(info.unique, actual.Name, inf.unique)
 				} else {
 					alert("failed to resolve type [", actual.Type, "] from ", full)
-					pbs.recordMissingInclusion(info.unique, actual.Name, OriginalName(actual.Type))
+					pbs.recordMissingInclusion(full, info.unique, actual.Name, OriginalName(actual.Type))
 				}
 			}
 
@@ -957,7 +974,7 @@ func (pbs *pbstate) onOneof(fullname FullName, unique UniqueName, one *proto.One
 						pbs.encounteredType(unique, actual.Name, inf.unique)
 					} else {
 						alert("failed to get unique name for type", actual.Type)
-						pbs.recordMissingInclusion(unique, actual.Name, OriginalName(actual.Type))
+						pbs.recordMissingInclusion(fullname, unique, actual.Name, OriginalName(actual.Type))
 					}
 				}
 
@@ -1095,7 +1112,7 @@ func (pbs *pbstate) handleServiceBody(srv *proto.Service) {
 					pbs.recordInclusion(info.unique, field, inf.unique)
 				} else {
 					alert("failed to resolve type [", actual.RequestType, "] from ", full)
-					pbs.recordMissingInclusion(info.unique, field, OriginalName(actual.RequestType))
+					pbs.recordMissingInclusion(full, info.unique, field, OriginalName(actual.RequestType))
 				}
 			}
 
@@ -1106,7 +1123,7 @@ func (pbs *pbstate) handleServiceBody(srv *proto.Service) {
 					pbs.recordInclusion(info.unique, field, inf.unique)
 				} else {
 					alert("failed to resolve type [", actual.ReturnsType, "] from ", full)
-					pbs.recordMissingInclusion(info.unique, field, OriginalName(actual.ReturnsType))
+					pbs.recordMissingInclusion(full, info.unique, field, OriginalName(actual.ReturnsType))
 				}
 			}
 
